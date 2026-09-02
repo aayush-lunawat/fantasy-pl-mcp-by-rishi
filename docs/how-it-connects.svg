@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 340" width="760" height="340" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <style>
+    .box { fill: none; stroke: #7d8590; stroke-width: 1.5; rx: 8; }
+    .accent { stroke: #2f81f7; }
+    .title { font-size: 15px; font-weight: 600; fill: #7d8590; }
+    .label { font-size: 13px; font-weight: 600; fill: #7d8590; }
+    .sub { font-size: 11.5px; fill: #8b949e; }
+    .tag { font-size: 11px; fill: #2f81f7; font-weight: 600; }
+    .arrow { stroke: #7d8590; stroke-width: 1.5; fill: none; marker-end: url(#a); }
+    .divider { stroke: #7d8590; stroke-width: 1; stroke-dasharray: 4 4; opacity: 0.5; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#7d8590"/>
+    </marker>
+  </defs>
+
+  <text x="20" y="26" class="title">Two ways to connect</text>
+
+  <!-- Option A -->
+  <text x="20" y="62" class="tag">A · RUN YOUR OWN COPY</text>
+  <rect x="20" y="76" width="150" height="62" class="box"/>
+  <text x="34" y="102" class="label">Your laptop</text>
+  <text x="34" y="120" class="sub">Claude Desktop, Cursor,</text>
+  <text x="34" y="134" class="sub">Hermes</text>
+
+  <path d="M 178 107 L 246 107" class="arrow"/>
+  <text x="186" y="99" class="sub">runs</text>
+
+  <rect x="254" y="76" width="150" height="62" class="box accent"/>
+  <text x="268" y="102" class="label">This server</text>
+  <text x="268" y="120" class="sub">on the same machine</text>
+
+  <path d="M 412 107 L 480 107" class="arrow"/>
+
+  <rect x="488" y="76" width="150" height="62" class="box"/>
+  <text x="502" y="102" class="label">FPL API</text>
+  <text x="502" y="120" class="sub">public football data</text>
+
+  <text x="20" y="162" class="sub">Free. Nothing exposed to the internet. Needed for your own team's live data.</text>
+
+  <line x1="20" y1="188" x2="740" y2="188" class="divider"/>
+
+  <!-- Option B -->
+  <text x="20" y="218" class="tag">B · CONNECT TO A HOSTED ONE</text>
+  <rect x="20" y="232" width="150" height="62" class="box"/>
+  <text x="34" y="258" class="label">Your phone</text>
+  <text x="34" y="276" class="sub">Claude app, ChatGPT web</text>
+
+  <path d="M 178 263 L 246 263" class="arrow"/>
+  <text x="184" y="255" class="sub">a URL</text>
+
+  <rect x="254" y="232" width="150" height="62" class="box accent"/>
+  <text x="268" y="258" class="label">Hosted server</text>
+  <text x="268" y="276" class="sub">running 24/7 somewhere</text>
+
+  <path d="M 412 263 L 480 263" class="arrow"/>
+
+  <rect x="488" y="232" width="150" height="62" class="box"/>
+  <text x="502" y="258" class="label">FPL API</text>
+  <text x="502" y="276" class="sub">public football data</text>
+
+  <text x="20" y="318" class="sub">No install. Paste a link. Public data only — never asks for your FPL login.</text>
+</svg>

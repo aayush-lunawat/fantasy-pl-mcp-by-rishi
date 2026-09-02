@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
+import argparse
 import logging
 import asyncio
 import atexit
-from typing import List, Dict, Any
+import os
+from typing import List, Dict, Any, Optional
 
 # Import MCP
 from mcp.server.fastmcp import FastMCP
@@ -294,10 +296,83 @@ def cleanup_auth():
 atexit.register(cleanup_auth)
 
 # Main function for direct execution and entry point
-def main():
-    """Run the Fantasy Premier League MCP server."""
-    logger.info("Starting Fantasy Premier League MCP Server")
-    mcp.run()
+def _build_arg_parser() -> "argparse.ArgumentParser":
+    parser = argparse.ArgumentParser(
+        prog="fpl-mcp",
+        description="Fantasy Premier League MCP server.",
+    )
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "sse", "streamable-http"],
+        default=os.environ.get("FPL_MCP_TRANSPORT", "stdio"),
+        help=(
+            "How clients connect. 'stdio' (default) is for desktop clients "
+            "that launch this server themselves, such as Claude Desktop, "
+            "Cursor and Hermes. 'streamable-http' serves over HTTP so the "
+            "server can be hosted and reached by a URL, which is what "
+            "ChatGPT and Claude's web and mobile apps require. 'sse' is the "
+            "older HTTP transport, kept for older clients. "
+            "Env: FPL_MCP_TRANSPORT"
+        ),
+    )
+    parser.add_argument(
+        "--host",
+        default=os.environ.get("FPL_MCP_HOST", "127.0.0.1"),
+        help=(
+            "Interface to bind for HTTP transports. Defaults to 127.0.0.1, "
+            "which accepts connections only from the same machine — the "
+            "right choice when a reverse proxy in front terminates TLS. "
+            "Use 0.0.0.0 only if you intend to expose the server directly. "
+            "Env: FPL_MCP_HOST"
+        ),
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.environ.get("FPL_MCP_PORT", "8000")),
+        help="Port for HTTP transports (default: 8000). Env: FPL_MCP_PORT",
+    )
+    parser.add_argument(
+        "--path",
+        default=os.environ.get("FPL_MCP_PATH", "/mcp"),
+        help=(
+            "URL path the MCP endpoint is served on for streamable-http "
+            "(default: /mcp). Env: FPL_MCP_PATH"
+        ),
+    )
+    return parser
+
+
+def main(argv: Optional[List[str]] = None):
+    """Run the Fantasy Premier League MCP server.
+
+    Defaults to stdio so that existing desktop configurations keep working
+    unchanged. HTTP transports are opt-in via --transport.
+    """
+    args = _build_arg_parser().parse_args(argv)
+
+    if args.transport in ("sse", "streamable-http"):
+        mcp.settings.host = args.host
+        mcp.settings.port = args.port
+        if args.transport == "streamable-http":
+            mcp.settings.streamable_http_path = args.path
+        logger.info(
+            "Starting Fantasy Premier League MCP Server on %s://%s:%s%s",
+            args.transport,
+            args.host,
+            args.port,
+            args.path if args.transport == "streamable-http" else "/sse",
+        )
+        if args.host == "0.0.0.0":
+            logger.warning(
+                "Binding to 0.0.0.0 exposes this server on every network "
+                "interface with no authentication in front of it. Put a "
+                "reverse proxy with TLS in front, or bind 127.0.0.1."
+            )
+    else:
+        logger.info("Starting Fantasy Premier League MCP Server (stdio)")
+
+    mcp.run(transport=args.transport)
 
 # Run the server if executed directly
 if __name__ == "__main__":
