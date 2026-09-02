@@ -61,6 +61,14 @@ Needed for your own live squad data, and for anyone hosting a server for others.
 pip install fpl-mcp
 ```
 
+On recent Ubuntu or Debian, `pip` may be missing or refuse to install into the system Python ("externally-managed-environment"). Use [uv](https://docs.astral.sh/uv/) instead — often already present:
+
+```bash
+uv tool install fpl-mcp
+```
+
+One difference worth knowing: `uv tool install` puts the package in an isolated environment, so `python -m fpl_mcp` won't work afterwards. Use the `fpl-mcp` command, and the absolute path to it in any client configuration.
+
 **For a desktop assistant** (Claude Desktop, Cursor, Hermes) — it runs on demand, with no server to keep alive. Add this to your client's MCP configuration:
 
 ```json
@@ -74,9 +82,17 @@ pip install fpl-mcp
 }
 ```
 
-For Claude Desktop that file lives at:
-- macOS — `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Windows — `%APPDATA%\Claude\claude_desktop_config.json`
+Where that configuration lives, and what the key is called:
+
+| Client | File | Key |
+|---|---|---|
+| Claude Desktop (macOS) | `~/Library/Application Support/Claude/claude_desktop_config.json` | `mcpServers` |
+| Claude Desktop (Windows) | `%APPDATA%\Claude\claude_desktop_config.json` | `mcpServers` |
+| Claude Code | `~/.claude.json`, or `claude mcp add` | `mcpServers` |
+| Cursor | `~/.cursor/mcp.json` | `mcpServers` |
+| Hermes | `~/.hermes/config.yaml` | `mcp_servers` |
+
+Hermes is the odd one out — YAML rather than JSON, and a snake_case key. Check its own MCP documentation for the entry shape rather than pasting the JSON above.
 
 Restart the client afterwards. If it can't start the server, see Troubleshooting — it's almost always PATH.
 
