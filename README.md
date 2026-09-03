@@ -7,8 +7,7 @@ This connects it to the live Fantasy Premier League API. Every player's real for
 > **No login required.** Public FPL data needs nothing but a team ID — and a team ID isn't a secret. Connecting your actual FPL account is optional, and covered separately below.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![PyPI version](https://badge.fury.io/py/fpl-mcp.svg)](https://badge.fury.io/py/fpl-mcp)
-[![Python](https://img.shields.io/pypi/pyversions/fpl-mcp)](https://pypi.org/project/fpl-mcp/)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 
 ---
 
@@ -58,13 +57,15 @@ Needed for your own live squad data, and for anyone hosting a server for others.
 **Requirements:** Python 3.10+.
 
 ```bash
-pip install fpl-mcp
+pip install "git+https://github.com/aayush-lunawat/fantasy-pl-mcp-by-rishi.git@feat/public-data-without-auth"
 ```
+
+> **Install from this branch, not from PyPI.** The published `fpl-mcp` package on PyPI is the upstream release, which predates three things this fork adds: public FPL data working without a login, HTTP transport for hosting, and `--allowed-host`. `pip install fpl-mcp` gets you a server that can't be hosted and still demands credentials to look up a team. These changes have been offered upstream; once merged, PyPI will be the right source again and this note goes away.
 
 On recent Ubuntu or Debian, `pip` may be missing or refuse to install into the system Python ("externally-managed-environment"). Use [uv](https://docs.astral.sh/uv/) instead — often already present:
 
 ```bash
-uv tool install fpl-mcp
+uv tool install --from "git+https://github.com/aayush-lunawat/fantasy-pl-mcp-by-rishi.git@feat/public-data-without-auth" fpl-mcp
 ```
 
 One difference worth knowing: `uv tool install` puts the package in an isolated environment, so `python -m fpl_mcp` won't work afterwards. Use the `fpl-mcp` command, and the absolute path to it in any client configuration.
@@ -194,7 +195,7 @@ Plus 5 prompts (transfer advice, player analysis, team rating, differentials, ch
 
 **Claude or ChatGPT won't connect to a hosted URL** — it must be HTTPS and reachable from the public internet. Neither connects to `http://`, to `localhost`, or to anything behind a VPN.
 
-**Authentication errors on tools that shouldn't need them** — you're on an older version. Public data no longer requires credentials. Upgrade with `pip install -U fpl-mcp`.
+**Authentication errors on tools that shouldn't need them, or `--transport` / `--allowed-host` not recognised** — you installed the PyPI release instead of this branch. Reinstall using the command in section B. This is the most common cause of "it doesn't have the features the README describes".
 
 ---
 

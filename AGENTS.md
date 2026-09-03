@@ -49,29 +49,23 @@ command -v uv              # is uv available?
 
 Recent Debian and Ubuntu (24.04 and later) often ship **no pip at all**, and mark the system Python as externally managed (PEP 668), which blocks `pip install` even when pip exists. On those machines `uv` is the right tool and is frequently already present.
 
+**Install from this branch, NOT from PyPI.** `pip install fpl-mcp` fetches the upstream release, which lacks public-data-without-login, HTTP transport, and `--allowed-host`. If you install that, later steps in this file will fail with "unrecognized arguments" and you will waste the person's time. Use the git URL below unless they explicitly tell you otherwise.
+
 **Option A — pip is available and works:**
 
 ```bash
-python3 -m pip install fpl-mcp
+python3 -m pip install "git+https://github.com/aayush-lunawat/fantasy-pl-mcp-by-rishi.git@feat/public-data-without-auth"
 ```
 
 **Option B — no pip, or an "externally-managed-environment" error:**
 
 ```bash
-uv tool install fpl-mcp
+uv tool install --from "git+https://github.com/aayush-lunawat/fantasy-pl-mcp-by-rishi.git@feat/public-data-without-auth" fpl-mcp
 ```
 
 If neither pip nor uv is available, stop and tell the person; installing a package manager is their decision.
 
-**Installing from a branch or fork** — do this when the person gives you a git URL, or when they need changes not yet in the PyPI release:
-
-```bash
-# pip
-python3 -m pip install "git+https://github.com/OWNER/REPO.git@BRANCH"
-
-# uv
-uv tool install --from "git+https://github.com/OWNER/REPO.git@BRANCH" fpl-mcp
-```
+Both options need `git` present. If `git --version` fails, install it first (`sudo apt install -y git` on Debian/Ubuntu) or ask the person.
 
 ### Verify the install
 
@@ -217,7 +211,7 @@ Afterwards, verify without ever seeing the secret by asking them to run the `che
 | Client starts but no FPL tools appear | Wrong config key or wrong file format for that client | Check the table in Step 3. Hermes wants YAML and `mcp_servers`; most others want JSON and `mcpServers` |
 | `Invalid Host header`, HTTP 421, from a hosted server | `--allowed-host` missing; the MCP library trusts only localhost | Restart with `--allowed-host YOUR.DOMAIN`. Do not work around it by rewriting the Host header in the proxy |
 | Tools return "No team ID specified" | A team ID is genuinely required | Ask the person for theirs — see the team ID section in README.md. Do not guess one |
-| Auth errors on team or league tools | Old version predating the public-data fix | `pip install -U fpl-mcp` |
+| Auth errors on team or league tools, or `unrecognized arguments: --transport` / `--allowed-host` | The PyPI release got installed instead of this branch | Reinstall with the git URL in Step 2. Never `pip install fpl-mcp` for this |
 | Client won't connect to the hosted URL | Not HTTPS, or not publicly reachable | Check both. `localhost` and VPN-only hosts never work |
 | Everything times out | The host can't reach `fantasy.premierleague.com` | Test with `curl -sI https://fantasy.premierleague.com/api/bootstrap-static/`. Some networks block it |
 | Server starts, then dies on first request | Memory. `bootstrap-static` is several MB parsed in one go | Needs roughly 512MB free. Very small VPS instances will thrash |
