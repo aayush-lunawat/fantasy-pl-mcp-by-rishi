@@ -129,6 +129,16 @@ fpl.example.com {
 
 ---
 
+## Your first conversation
+
+The first time you ask about *your* team, it will ask which team that is. Nothing is stored about you, so it has no way to know — that's the tradeoff for not needing a login.
+
+Paste your team ID and it carries on. To avoid being asked again, put it in your assistant's own memory: in Claude, **Settings → Profile** (personal preferences), add a line like:
+
+> My FPL team ID is 1234567 — use it when I ask about my team.
+
+Every future conversation then starts knowing it, on any device.
+
 ## Finding your team ID
 
 **It is not in the Premier League mobile app** — no screen shows it. Use a browser:
