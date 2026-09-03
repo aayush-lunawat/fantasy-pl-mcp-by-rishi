@@ -99,10 +99,12 @@ Restart the client afterwards. If it can't start the server, see Troubleshooting
 **To host it over HTTP** so phones and ChatGPT can reach it:
 
 ```bash
-fpl-mcp --transport streamable-http --port 8000
+fpl-mcp --transport streamable-http --port 8000 --allowed-host fpl.example.com
 ```
 
 That listens on `127.0.0.1:8000/mcp` — local only, deliberately. To let the outside world in, put a reverse proxy with HTTPS in front. Both Claude and ChatGPT require HTTPS and will not connect to a plain `http://` address.
+
+**`--allowed-host` is not optional when hosting.** The MCP protocol library checks the `Host` header on every request as protection against DNS-rebinding attacks, and out of the box it trusts only localhost. Behind a domain name, every request arrives with your public hostname, and without this flag they're all rejected with `Invalid Host header` (HTTP 421). Pass your real hostname; repeat the flag for more than one.
 
 | Flag | Default | What it does |
 |---|---|---|
@@ -110,8 +112,17 @@ That listens on `127.0.0.1:8000/mcp` — local only, deliberately. To let the ou
 | `--host` | `127.0.0.1` | Bind address. Change only if nothing is proxying in front |
 | `--port` | `8000` | Port for HTTP transports |
 | `--path` | `/mcp` | URL path the endpoint is served on |
+| `--allowed-host` | localhost only | Public hostname clients reach you at. Required behind a proxy or domain |
 
-Environment equivalents: `FPL_MCP_TRANSPORT`, `FPL_MCP_HOST`, `FPL_MCP_PORT`, `FPL_MCP_PATH`.
+Environment equivalents: `FPL_MCP_TRANSPORT`, `FPL_MCP_HOST`, `FPL_MCP_PORT`, `FPL_MCP_PATH`, `FPL_MCP_ALLOWED_HOSTS` (comma-separated).
+
+A minimal [Caddy](https://caddyserver.com) config, which handles HTTPS certificates by itself:
+
+```
+fpl.example.com {
+    reverse_proxy 127.0.0.1:8000
+}
+```
 
 > **Setting this up with an AI agent instead of by hand?** Point it at [AGENTS.md](AGENTS.md), written for exactly that.
 
@@ -178,6 +189,8 @@ Plus 5 prompts (transfer advice, player analysis, team rating, differentials, ch
 **Client can't find `fpl-mcp` / `spawn fpl-mcp ENOENT`** — the install directory isn't on the PATH your client sees, because desktop clients launch the server without loading your shell profile. Run `which fpl-mcp` (`where` on Windows) and use that full path in the config, or use the `python -m fpl_mcp` form above. This is the most common setup failure by a distance.
 
 **"No team ID specified"** — pass your team ID explicitly. See above for finding it.
+
+**`Invalid Host header` / HTTP 421 from a hosted server** — you didn't pass `--allowed-host`. The server trusts only localhost by default and rejects requests carrying your public hostname. Restart it with `--allowed-host your.domain`.
 
 **Claude or ChatGPT won't connect to a hosted URL** — it must be HTTPS and reachable from the public internet. Neither connects to `http://`, to `localhost`, or to anything behind a VPN.
 

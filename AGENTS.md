@@ -157,11 +157,13 @@ Ask the person for their team ID if you don't have one. **Never invent a team ID
 
 ## Step 4 — Hosted setup (HTTP)
 
-Start it bound to localhost:
+Start it bound to localhost, naming the public hostname it will be reached at:
 
 ```bash
-fpl-mcp --transport streamable-http --port 8000
+fpl-mcp --transport streamable-http --port 8000 --allowed-host YOUR.DOMAIN
 ```
+
+**`--allowed-host` is mandatory here.** The MCP library validates the `Host` header against a list that contains only localhost by default. Behind a proxy or domain, every real request carries the public hostname and is rejected with `Invalid Host header` (HTTP 421). If you don't yet know the hostname, ask the person — do not guess one, and do not skip the flag and hope.
 
 Verify from the same machine:
 
@@ -213,6 +215,7 @@ Afterwards, verify without ever seeing the secret by asking them to run the `che
 | `No module named fpl_mcp` **after `uv tool install`** | Expected — uv installs into an isolated environment on purpose | Not a fault. Verify with `fpl-mcp --help` and configure the absolute binary path |
 | `No module named fpl_mcp` **after pip** | Installed into a different interpreter than you're running | Use one interpreter for both; check `sys.executable` |
 | Client starts but no FPL tools appear | Wrong config key or wrong file format for that client | Check the table in Step 3. Hermes wants YAML and `mcp_servers`; most others want JSON and `mcpServers` |
+| `Invalid Host header`, HTTP 421, from a hosted server | `--allowed-host` missing; the MCP library trusts only localhost | Restart with `--allowed-host YOUR.DOMAIN`. Do not work around it by rewriting the Host header in the proxy |
 | Tools return "No team ID specified" | A team ID is genuinely required | Ask the person for theirs — see the team ID section in README.md. Do not guess one |
 | Auth errors on team or league tools | Old version predating the public-data fix | `pip install -U fpl-mcp` |
 | Client won't connect to the hosted URL | Not HTTPS, or not publicly reachable | Check both. `localhost` and VPN-only hosts never work |
