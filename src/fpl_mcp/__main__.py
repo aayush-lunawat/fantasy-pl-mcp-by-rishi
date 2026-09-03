@@ -340,7 +340,59 @@ def _build_arg_parser() -> "argparse.ArgumentParser":
             "(default: /mcp). Env: FPL_MCP_PATH"
         ),
     )
+    parser.add_argument(
+        "--allowed-host",
+        action="append",
+        dest="allowed_hosts",
+        default=None,
+        metavar="HOST",
+        help=(
+            "Public hostname this server is reached at, e.g. "
+            "fpl.example.com. REQUIRED when hosting behind a reverse proxy "
+            "or a domain name: the MCP SDK rejects any request whose Host "
+            "header it doesn't recognise, answering 'Invalid Host header', "
+            "and by default it recognises only localhost. Repeat the flag "
+            "for several names. Localhost is always kept. "
+            "Env: FPL_MCP_ALLOWED_HOSTS (comma-separated)"
+        ),
+    )
     return parser
+
+
+def _build_transport_security(hosts: List[str], port: int):
+    """Build DNS-rebinding-protection settings that permit `hosts`.
+
+    The SDK matches the Host header exactly, and a request arriving over
+    HTTPS on 443 carries no port in that header while one on another port
+    does. Accept both shapes, and keep the loopback entries so local
+    testing and health checks continue to work.
+    """
+    from mcp.server.transport_security import TransportSecuritySettings
+
+    allowed_hosts: List[str] = [
+        "127.0.0.1",
+        f"127.0.0.1:{port}",
+        "localhost",
+        f"localhost:{port}",
+    ]
+    allowed_origins: List[str] = [
+        f"http://127.0.0.1:{port}",
+        f"http://localhost:{port}",
+    ]
+
+    for host in hosts:
+        # Tolerate a scheme or a path being pasted in by mistake.
+        cleaned = host.strip().removeprefix("https://").removeprefix("http://")
+        cleaned = cleaned.split("/")[0]
+        if not cleaned:
+            continue
+        allowed_hosts.extend([cleaned, f"{cleaned}:*"])
+        allowed_origins.extend([f"https://{cleaned}", f"http://{cleaned}"])
+
+    return TransportSecuritySettings(
+        allowed_hosts=allowed_hosts,
+        allowed_origins=allowed_origins,
+    )
 
 
 def main(argv: Optional[List[str]] = None):
@@ -356,6 +408,23 @@ def main(argv: Optional[List[str]] = None):
         mcp.settings.port = args.port
         if args.transport == "streamable-http":
             mcp.settings.streamable_http_path = args.path
+
+        allowed_hosts = args.allowed_hosts
+        if not allowed_hosts:
+            env_hosts = os.environ.get("FPL_MCP_ALLOWED_HOSTS", "")
+            allowed_hosts = [h for h in env_hosts.split(",") if h.strip()]
+        if allowed_hosts:
+            mcp.settings.transport_security = _build_transport_security(
+                allowed_hosts, args.port
+            )
+            logger.info("Accepting requests for hosts: %s", ", ".join(allowed_hosts))
+        else:
+            logger.warning(
+                "No --allowed-host given, so only localhost requests will be "
+                "accepted. If this server sits behind a reverse proxy or a "
+                "domain name, clients will get 'Invalid Host header' (HTTP "
+                "421) until you pass --allowed-host YOUR.DOMAIN"
+            )
         logger.info(
             "Starting Fantasy Premier League MCP Server on %s://%s:%s%s",
             args.transport,
