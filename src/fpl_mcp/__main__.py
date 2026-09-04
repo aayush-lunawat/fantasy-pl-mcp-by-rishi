@@ -7,6 +7,8 @@ import atexit
 import os
 from typing import List, Dict, Any, Optional
 
+import anyio
+
 # Import MCP
 from mcp.server.fastmcp import FastMCP
 
@@ -441,7 +443,28 @@ def main(argv: Optional[List[str]] = None):
     else:
         logger.info("Starting Fantasy Premier League MCP Server (stdio)")
 
-    mcp.run(transport=args.transport)
+    if args.transport == "streamable-http":
+        # Run this ourselves (mirroring FastMCP.run_streamable_http_async)
+        # instead of mcp.run(), so InboundRateLimitMiddleware sits in front
+        # of every request. stdio and sse are unaffected.
+        import uvicorn
+
+        from .http_middleware import InboundRateLimitMiddleware
+
+        app = InboundRateLimitMiddleware(mcp.streamable_http_app())
+
+        async def _serve() -> None:
+            config = uvicorn.Config(
+                app,
+                host=mcp.settings.host,
+                port=mcp.settings.port,
+                log_level=mcp.settings.log_level.lower(),
+            )
+            await uvicorn.Server(config).serve()
+
+        anyio.run(_serve)
+    else:
+        mcp.run(transport=args.transport)
 
 # Run the server if executed directly
 if __name__ == "__main__":

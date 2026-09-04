@@ -185,8 +185,15 @@ class CredentialManager:
         refresh_token = os.getenv("FPL_REFRESH_TOKEN")
         team_id = os.getenv("FPL_TEAM_ID")
 
-        if refresh_token and team_id:
-            logger.info("Loaded credentials from environment variables")
+        if refresh_token or team_id:
+            # A team ID alone (no refresh token) is a valid, common case: a
+            # self-hoster who only wants public data about their own team,
+            # not the ability to authenticate. Requiring both here used to
+            # silently discard a lone FPL_TEAM_ID.
+            logger.info(
+                "Loaded %s from environment variables",
+                "credentials" if (refresh_token and team_id) else "team ID (no refresh token)",
+            )
             return refresh_token, team_id
 
         # Check legacy .env file
@@ -195,7 +202,7 @@ class CredentialManager:
             refresh_token = os.getenv("FPL_REFRESH_TOKEN")
             team_id = os.getenv("FPL_TEAM_ID")
 
-            if refresh_token and team_id:
+            if refresh_token or team_id:
                 logger.info(f"Loaded credentials from {self._legacy_env_file}")
                 return refresh_token, team_id
 
@@ -207,7 +214,7 @@ class CredentialManager:
                     refresh_token = config.get("refresh_token")
                     team_id = config.get("team_id")
 
-                    if refresh_token and team_id:
+                    if refresh_token or team_id:
                         logger.info(f"Loaded credentials from {self._legacy_json_file}")
                         return refresh_token, team_id
 

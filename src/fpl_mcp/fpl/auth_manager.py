@@ -57,8 +57,17 @@ class FPLAuthManager:
     
     @property
     def team_id(self) -> Optional[str]:
-        """Get the authenticated user's team ID"""
-        return self._team_id
+        """Get the effective team ID for the current call.
+
+        A per-request X-FPL-Team-ID header takes priority when present (the
+        shared hosted server has this on every request from a properly
+        configured connector; see request_context.py) so a shared server can
+        answer "my team" for each caller without storing anyone's team ID.
+        Falls back to whatever team ID this process was configured with
+        (stdio / self-hosted usage, or no header sent).
+        """
+        from .request_context import get_header_team_id
+        return get_header_team_id() or self._team_id
     
     @property
     def is_authenticated(self) -> bool:
@@ -285,7 +294,7 @@ class FPLAuthManager:
 
     async def get_my_team(self, team_id: Optional[int] = None) -> Dict[str, Any]:
         """Get current team for the authenticated user"""
-        team_id = team_id or self._team_id
+        team_id = team_id or self.team_id
         if not team_id:
             raise ValueError("Team ID must be provided")
             
@@ -299,7 +308,7 @@ class FPLAuthManager:
     
     async def get_team_for_gameweek(self, team_id: Optional[int] = None, gameweek: int = 1) -> Dict[str, Any]:
         """Get team picks for a specific gameweek"""
-        team_id = team_id or self._team_id
+        team_id = team_id or self.team_id
         if not team_id:
             raise ValueError("Team ID must be provided")
             
@@ -323,7 +332,7 @@ class FPLAuthManager:
 
         Public endpoint: works for any team id without credentials.
         """
-        team_id = team_id or self._team_id
+        team_id = team_id or self.team_id
         if not team_id:
             raise ValueError(
                 "Team ID must be provided. Find yours by signing in at "

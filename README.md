@@ -133,7 +133,17 @@ fpl.example.com {
 
 The first time you ask about *your* team, it will ask which team that is. Nothing is stored about you, so it has no way to know — that's the tradeoff for not needing a login.
 
-Paste your team ID and it carries on. To avoid being asked again, put it in your assistant's own memory: in Claude, **Settings → Profile** (personal preferences), add a line like:
+Paste your team ID and it carries on. Two ways to avoid being asked again:
+
+**Set it once as a connector header (recommended for a shared/hosted server).** Claude's custom connectors let you set up to four request headers when you add one. Add:
+
+| Header | Value |
+|---|---|
+| `X-FPL-Team-ID` | your team ID, e.g. `1234567` |
+
+and every request you send carries it automatically — no memory feature needed, works the same on a phone, and each person connecting to the same shared server gets *their own* answer with nothing stored server-side. If you self-host with `--transport stdio`, this header does nothing (there's no HTTP request to carry it on); use `FPL_TEAM_ID` below instead.
+
+**Or put it in your assistant's own memory:** in Claude, **Settings → Profile** (personal preferences), add a line like:
 
 > My FPL team ID is 1234567 — use it when I ask about my team.
 
@@ -163,17 +173,37 @@ One thing worth knowing: your registered first and last name are public alongsid
 
 ## Connecting your own FPL account (optional)
 
-Only needed for your *current* gameweek squad before the deadline, your selling prices, your bank, or your remaining chips. Everything else works without it.
+Only needed for your *current* gameweek squad before the deadline, your selling prices, your bank, or your remaining chips. Everything else — including looking up your own team's public data — works without it; see the lighter-weight option at the end of this section if that's all you want.
 
 **Only ever do this on a server you run yourself.** Never give your FPL credentials to someone else's hosted endpoint — including one a friend sent you.
+
+**Step 1 — get your refresh token.** FPL logs in via PingOne (OIDC), so the credential you need is a refresh token, not your password.
+
+1. Log in at [fantasy.premierleague.com](https://fantasy.premierleague.com) in your browser.
+2. Open DevTools (F12) → **Console**, and run:
+   ```js
+   copy(JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>k.startsWith('oidc.user:')))).refresh_token)
+   ```
+   (If Chrome refuses to let you paste, type `allow pasting` into the console first, press Enter, then run the command above.) Your refresh token is now on the clipboard.
+3. Prefer clicking over the console? DevTools → **Application** → **Local storage** → `https://fantasy.premierleague.com` → copy the whole value of the key starting with `oidc.user:` — the setup step below extracts the token from either the bare value or that full JSON blob.
+
+**Step 2 — run setup:**
 
 ```bash
 fpl-mcp-config setup
 ```
 
-You'll be asked for your team ID and a refresh token, copied from `oidc.user` in your browser's Local Storage while signed in to FPL. Credentials are encrypted at rest in `~/.fpl-mcp/credentials.enc`, tied to your machine.
+Paste what you copied when asked, then your [team ID](#finding-your-team-id). Credentials are encrypted at rest in `~/.fpl-mcp/credentials.enc`, tied to your machine.
 
-Two things to expect: authenticating retires the token your browser holds, so you'll be signed out of FPL on the web once. And tokens expire periodically, so this isn't quite set-and-forget.
+**Step 3 — validate it worked:**
+
+```bash
+fpl-mcp-config test
+```
+
+Two things to expect: authenticating retires the token your browser holds, so you'll be signed out of FPL on the web once. And tokens expire periodically — if a working setup stops authenticating later, that's normal; re-run `fpl-mcp-config setup` with a fresh token from Step 1.
+
+**Just want your own public team data, no login at all?** Set the `FPL_TEAM_ID` environment variable to your team ID and skip all of the above — this server treats a self-hosted instance's own team ID as its default for any tool that would otherwise ask "which team is yours", the same public data everyone else gets by pasting a team ID, just without having to repeat it.
 
 ---
 
