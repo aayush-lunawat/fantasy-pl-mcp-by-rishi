@@ -116,6 +116,28 @@ Replace `/full/path/to/your/venv/bin/fpl-mcp` with the actual path to the execut
 
 > **Note:** Using just `"command": "fpl-mcp"` may result in a `spawn fpl-mcp ENOENT` error since Claude Desktop might not have access to your virtual environment's PATH. Using the full path or the Python module approach helps avoid this issue.
 
+### 4. Running over HTTP (for remote or hosted access)
+
+The options above use stdio, where the client launches the server on the same machine. To reach the server over a network instead — for ChatGPT connectors, Claude's web and mobile apps, or one instance shared by several people — run it with an HTTP transport:
+
+```bash
+fpl-mcp --transport streamable-http --port 8000 --allowed-host your.domain
+```
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--transport` | `stdio` | `stdio`, `streamable-http`, or `sse` |
+| `--host` | `127.0.0.1` | Bind address |
+| `--port` | `8000` | Port for HTTP transports |
+| `--path` | `/mcp` | URL path the endpoint is served on |
+| `--allowed-host` | localhost only | Public hostname clients connect to; repeatable |
+
+Each has an environment variable equivalent: `FPL_MCP_TRANSPORT`, `FPL_MCP_HOST`, `FPL_MCP_PORT`, `FPL_MCP_PATH` and `FPL_MCP_ALLOWED_HOSTS`.
+
+> **Note:** `--allowed-host` is required when serving behind a domain name or reverse proxy. The MCP SDK validates the `Host` header against an allowlist containing only localhost by default, and rejects anything else with `Invalid Host header` (HTTP 421).
+
+The server binds `127.0.0.1` by default so a reverse proxy can terminate TLS in front of it; both Claude and ChatGPT require HTTPS for remote connectors.
+
 ## Usage
 
 ### In Claude for Desktop
