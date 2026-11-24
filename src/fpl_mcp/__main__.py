@@ -406,6 +406,12 @@ def main(argv: Optional[List[str]] = None):
     args = _build_arg_parser().parse_args(argv)
 
     if args.transport in ("sse", "streamable-http"):
+        # Opt-in usage analytics for hosted servers; a no-op unless
+        # POSTHOG_API_KEY is set. See analytics.py for what is recorded.
+        from .analytics import init_analytics
+
+        init_analytics(mcp)
+
         mcp.settings.host = args.host
         mcp.settings.port = args.port
         if args.transport == "streamable-http":
