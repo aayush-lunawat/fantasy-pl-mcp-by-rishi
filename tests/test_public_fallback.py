@@ -19,7 +19,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from fpl_mcp.fpl.auth_manager import FPLAuthManager
+from fpl_mcp.fpl.auth_manager import (
+    PUBLIC_REQUEST_TIMEOUT,
+    FPLAuthError,
+    FPLAuthManager,
+)
 
 PUBLIC_URL = "https://fantasy.premierleague.com/api/entry/6071111/"
 PUBLIC_BODY = {"name": "Big_Brawls", "summary_overall_points": 122}
@@ -130,3 +134,98 @@ async def test_working_credentials_still_use_the_authenticated_path():
 
     assert result == PUBLIC_BODY
     assert _sent_headers(session).get(AUTH_HEADER) == "Bearer at"
+
+
+# --- Review follow-ups (PR #29) -------------------------------------------
+
+
+def _http_error_session(status):
+    """A session whose authed GET fails with `status` and whose token grant works."""
+    import requests
+
+    session = _mock_session(token_status=200)
+    error_response = MagicMock()
+    error_response.status_code = status
+    error_response.raise_for_status.side_effect = requests.HTTPError(
+        f"{status} error", response=error_response
+    )
+    session.get.return_value = error_response
+    return session
+
+
+async def test_auth_check_does_not_report_success_with_an_expired_token():
+    """An expired token must fail the auth check, not pass via public data."""
+    manager = _make_manager(refresh_token="stale-token", team_id="6071111")
+    session = _mock_session(token_status=400)
+
+    with patch("fpl_mcp.fpl.auth_manager.requests.Session", return_value=session):
+        with pytest.raises(FPLAuthError, match="invalid or expired"):
+            await manager.verify_authentication()
+
+    # It never reached a data request, public or otherwise.
+    session.get.assert_not_called()
+
+
+async def test_check_fpl_authentication_tool_reports_expired_token():
+    """The MCP tool itself must say authenticated: False for a dead token."""
+    from mcp.server.fastmcp import FastMCP
+
+    from fpl_mcp.fpl.tools import team
+
+    manager = _make_manager(refresh_token="stale-token", team_id="6071111")
+    session = _mock_session(token_status=400)
+    mcp = FastMCP("test")
+    team.register_tools(mcp)
+
+    with patch.object(team, "get_auth_manager", return_value=manager), patch(
+        "fpl_mcp.fpl.auth_manager.requests.Session", return_value=session
+    ):
+        _, structured = await mcp.call_tool("check_fpl_authentication", {})
+
+    assert structured["result"]["authenticated"] is False
+
+
+async def test_public_request_sets_a_timeout():
+    """A stalled FPL response must time out rather than block forever."""
+    manager = _make_manager()
+    session = _mock_session()
+
+    with patch("fpl_mcp.fpl.auth_manager.requests.Session", return_value=session):
+        await manager.make_public_request(PUBLIC_URL)
+
+    _, kwargs = session.get.call_args
+    assert kwargs.get("timeout") == PUBLIC_REQUEST_TIMEOUT
+
+
+@pytest.mark.parametrize("status", [404, 429, 500])
+async def test_non_auth_http_errors_do_not_trigger_a_public_retry(status):
+    """Removing credentials can't fix a 404/429/500, so don't spend a second call."""
+    import requests
+
+    manager = _make_manager(refresh_token="good-token", team_id="6071111")
+    session = _http_error_session(status)
+
+    with patch("fpl_mcp.fpl.auth_manager.requests.Session", return_value=session):
+        with pytest.raises(requests.HTTPError):
+            await manager.make_optional_auth_request(PUBLIC_URL)
+
+    assert session.get.call_count == 1
+
+
+@pytest.mark.parametrize("status", [401, 403])
+async def test_refused_credentials_still_fall_back_to_public(status):
+    """FPL refusing the token is an auth failure, so the public read is right."""
+    manager = _make_manager(refresh_token="good-token", team_id="6071111")
+    session = _http_error_session(status)
+    public_response = MagicMock()
+    public_response.status_code = 200
+    public_response.json.return_value = PUBLIC_BODY
+    public_response.raise_for_status.return_value = None
+    session.get.side_effect = [session.get.return_value, public_response]
+
+    with patch("fpl_mcp.fpl.auth_manager.requests.Session", return_value=session):
+        result = await manager.make_optional_auth_request(PUBLIC_URL)
+
+    assert result == PUBLIC_BODY
+    assert session.get.call_count == 2
+    assert AUTH_HEADER not in _sent_headers(session)
