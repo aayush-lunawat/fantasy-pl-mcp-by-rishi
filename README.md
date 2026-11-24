@@ -39,7 +39,13 @@ Pick the row that matches you.
 
 ### A · I just want to ask questions (2 minutes, no install)
 
-Best for phones, and for anyone who doesn't want to install anything. You'll need the URL of a running server — either one someone shared with you, or your own from section B.
+Best for phones, and for anyone who doesn't want to install anything. Use the free public server:
+
+```
+https://fpl.aayushlunawat.com/mcp
+```
+
+or your own from section B. The public server serves public FPL data only (no login tools), allows 30 requests a minute per caller, and runs on a free-tier machine, so it is best-effort with no uptime promise. See [what the public server records](#what-the-public-server-records).
 
 **Claude** — works on the free plan.
 
@@ -252,10 +258,18 @@ Inspect the server interactively with `mcp dev -m fpl_mcp`, or `npx @modelcontex
 
 ---
 
+## What the public server records
+
+To learn which tools people use and whether they work, the public server sends anonymous usage events to PostHog. Per tool call: the tool name, whether it succeeded, how long it took, the app you connected from (for example Claude or ChatGPT) and your country (from Cloudflare). You are counted by a keyed hash of your IP address, so repeat visits count as one user, but the IP itself is never stored or sent.
+
+It never records what you asked: no team IDs, league IDs, player names, tool results or request headers. Self-hosted copies record nothing unless you set `POSTHOG_API_KEY` yourself (see `src/fpl_mcp/analytics.py`).
+
+---
+
 ## Credits and licence
 
 Built on [rishijatia/fantasy-pl-mcp](https://github.com/rishijatia/fantasy-pl-mcp) by **Rishi Jatia**. The server, its tools and the FPL authentication flow are his work. MIT licensed — © 2025 Fantasy PL MCP Contributors.
 
 This fork adds HTTP transport for hosting, and removes the credential requirement from FPL endpoints that were always public.
 
-Not affiliated with the Premier League or Fantasy Premier League. It reads the same public API your browser does.
+Not affiliated with, endorsed by or connected to the Premier League or Fantasy Premier League. It reads the same public API your browser does; FPL data belongs to the Premier League. Free and non-commercial.
