@@ -22,10 +22,19 @@ from typing import Dict, List
 class InboundRateLimiter:
     """Non-blocking sliding-window limiter, keyed by caller."""
 
+    # Drop idle keys every this many calls, so a public server seeing many
+    # short-lived sessions doesn't grow this dict forever.
+    _PRUNE_EVERY = 1000
+
     def __init__(self, max_requests: int = 30, per_seconds: int = 60):
         self.max_requests = max_requests
         self.time_window = per_seconds
         self._requests: Dict[str, List[float]] = defaultdict(list)
+        self._calls = 0
+
+    def _prune(self, cutoff: float) -> None:
+        for key in [k for k, w in self._requests.items() if not w or w[-1] < cutoff]:
+            del self._requests[key]
 
     def allow(self, key: str) -> bool:
         """Return True and record the hit if `key` is under budget.
@@ -33,9 +42,13 @@ class InboundRateLimiter:
         Returns False immediately (no waiting) if `key` is over budget.
         """
         now = time.time()
-        window = self._requests[key]
-
         cutoff = now - self.time_window
+
+        self._calls += 1
+        if self._calls % self._PRUNE_EVERY == 0:
+            self._prune(cutoff)
+
+        window = self._requests[key]
         drop = 0
         while drop < len(window) and window[drop] < cutoff:
             drop += 1
@@ -49,10 +62,23 @@ class InboundRateLimiter:
         return True
 
 
-# Shared instance for the process. Defaults are generous enough for one
-# person's normal back-and-forth (a few tool calls per message) while still
-# capping a runaway client. Override via env if friends' usage patterns need it.
+# Shared instances for the process.
+#
+# inbound_limiter caps one MCP session (or, before a session exists, one
+# address). The default is generous enough for one person's normal
+# back-and-forth (a few tool calls per message) while still capping a
+# runaway client.
+#
+# ip_limiter is a looser ceiling per source address. Hosted connectors
+# (claude.ai, ChatGPT) call from their providers' own networks, so many
+# different people arrive from the same few addresses; a per-address limit
+# alone would make all of them share one person's budget.
+_period = int(os.environ.get("FPL_MCP_INBOUND_PERIOD_SECONDS", "60"))
 inbound_limiter = InboundRateLimiter(
     max_requests=int(os.environ.get("FPL_MCP_INBOUND_MAX_REQUESTS", "30")),
-    per_seconds=int(os.environ.get("FPL_MCP_INBOUND_PERIOD_SECONDS", "60")),
+    per_seconds=_period,
+)
+ip_limiter = InboundRateLimiter(
+    max_requests=int(os.environ.get("FPL_MCP_INBOUND_IP_MAX_REQUESTS", "600")),
+    per_seconds=_period,
 )

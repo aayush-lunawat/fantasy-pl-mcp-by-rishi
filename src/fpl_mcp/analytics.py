@@ -11,9 +11,9 @@ send nothing. When on, each MCP tool call produces one PostHog event:
 
 What is never sent: tool arguments (team IDs, league IDs, player names),
 tool results, raw IP addresses, request headers. The distinct ID is a keyed
-hash of the caller's IP (HMAC-SHA256 with ANALYTICS_SALT), so the same
-caller counts as one user over time without the IP being recoverable from
-PostHog. Country comes from Cloudflare's CF-IPCountry header, not GeoIP;
+hash (HMAC-SHA256 with ANALYTICS_SALT) of the best identity available: the
+X-FPL-Team-ID connector header, else the MCP session, else the caller's IP.
+See _request_context for why IP comes last. Country comes from Cloudflare's CF-IPCountry header, not GeoIP;
 PostHog's own GeoIP is disabled because it would only see this server's IP.
 
 Events are queued and sent by the PostHog SDK's background thread, so a
@@ -57,10 +57,15 @@ def _caller_ip(request: Any) -> Optional[str]:
     return getattr(client, "host", None)
 
 
+def _keyed(value: str) -> str:
+    """HMAC so the raw value can't be recovered or brute-forced from PostHog."""
+    return hmac.new(_salt, value.encode(), hashlib.sha256).hexdigest()[:24]
+
+
 def _distinct_id(ip: Optional[str]) -> str:
     if not ip:
         return "anonymous"
-    return "u_" + hmac.new(_salt, ip.encode(), hashlib.sha256).hexdigest()[:24]
+    return "u_" + _keyed(ip)
 
 
 def _request_context() -> dict:
@@ -83,15 +88,27 @@ def _request_context() -> dict:
         pass
 
     request = getattr(ctx, "request", None)
+    team = _header(request, "x-fpl-team-id") if request is not None else None
+    session = _header(request, "mcp-session-id") if request is not None else None
     ip = _caller_ip(request) if request is not None else None
-    props["distinct_id"] = _distinct_id(ip)
+
+    # Who counts as "one user". claude.ai and ChatGPT connectors call from
+    # their providers' networks, so an IP there is shared by many people and
+    # would undercount badly. Best available signal first:
+    #   team   - the X-FPL-Team-ID connector header: one person, stable
+    #   session- one MCP session: one connection, may be one conversation
+    #   ip     - direct clients (desktop, Hermes) with their own address
+    if team:
+        props["distinct_id"], props["id_source"] = "t_" + _keyed(team), "team_header"
+    elif session:
+        props["distinct_id"], props["id_source"] = "s_" + _keyed(session), "session"
+    else:
+        props["distinct_id"], props["id_source"] = _distinct_id(ip), "ip"
+
     if request is not None:
         props["country"] = _header(request, "cf-ipcountry")
-        session = _header(request, "mcp-session-id")
         if session:
-            props["mcp_session"] = hmac.new(
-                _salt, session.encode(), hashlib.sha256
-            ).hexdigest()[:16]
+            props["mcp_session"] = _keyed(session)[:16]
     return props
 
 

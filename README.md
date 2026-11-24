@@ -260,7 +260,7 @@ Inspect the server interactively with `mcp dev -m fpl_mcp`, or `npx @modelcontex
 
 ## What the public server records
 
-To learn which tools people use and whether they work, the public server sends anonymous usage events to PostHog. Per tool call: the tool name, whether it succeeded, how long it took, the app you connected from (for example Claude or ChatGPT) and your country (from Cloudflare). You are counted by a keyed hash of your IP address, so repeat visits count as one user, but the IP itself is never stored or sent.
+To learn which tools people use and whether they work, the public server sends anonymous usage events to PostHog. Per tool call: the tool name, whether it succeeded, how long it took, the app you connected from (for example Claude or ChatGPT) and your country (from Cloudflare). You are counted by a keyed hash of your team ID if you set the `X-FPL-Team-ID` connector header, otherwise of your connection session or IP address; the raw values are never stored or sent.
 
 It never records what you asked: no team IDs, league IDs, player names, tool results or request headers. Self-hosted copies record nothing unless you set `POSTHOG_API_KEY` yourself (see `src/fpl_mcp/analytics.py`).
 

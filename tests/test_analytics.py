@@ -42,8 +42,10 @@ def _enable(monkeypatch, mcp):
     return fake
 
 
-def _fake_request(ip="203.0.113.7", country="IN"):
-    headers = {"cf-connecting-ip": ip, "cf-ipcountry": country, "mcp-session-id": "sess-1"}
+def _fake_request(ip="203.0.113.7", country="IN", session="sess-1"):
+    headers = {"cf-connecting-ip": ip, "cf-ipcountry": country}
+    if session:
+        headers["mcp-session-id"] = session
     request = SimpleNamespace(headers=headers, client=None)
     session = SimpleNamespace(
         client_params=SimpleNamespace(clientInfo=SimpleNamespace(name="claude-ai", version="1.0"))
@@ -90,7 +92,7 @@ async def test_tool_call_event_has_no_arguments_or_ip(monkeypatch):
     assert "6071111" not in flat
     assert "203.0.113.7" not in flat
     assert "sess-1" not in flat
-    assert kwargs["distinct_id"].startswith("u_")
+    assert kwargs["distinct_id"].startswith("s_")
 
 
 async def test_same_ip_same_user_different_ip_different_user(monkeypatch):
@@ -100,7 +102,7 @@ async def test_same_ip_same_user_different_ip_different_user(monkeypatch):
 
     ids = []
     for ip in ("203.0.113.7", "203.0.113.7", "198.51.100.1"):
-        token = request_ctx.set(_fake_request(ip=ip))
+        token = request_ctx.set(_fake_request(ip=ip, session=None))
         try:
             await mcp.call_tool("lookup", {"team_id": 1})
         finally:
@@ -140,3 +142,32 @@ async def test_listing_tools_is_recorded(monkeypatch):
     kwargs = fake.capture.call_args.kwargs
     assert kwargs["event"] == "tools_listed"
     assert kwargs["properties"]["tool_count"] == 3
+
+
+async def test_identity_prefers_team_header_then_session(monkeypatch):
+    """Hosted connectors share provider IPs, so IP must be the last resort."""
+    mcp = _server()
+    fake = _enable(monkeypatch, mcp)
+    from mcp.server.lowlevel.server import request_ctx
+
+    async def call(headers):
+        ctx = _fake_request()
+        ctx.request.headers = headers
+        token = request_ctx.set(ctx)
+        try:
+            await mcp.call_tool("lookup", {"team_id": 1})
+        finally:
+            request_ctx.reset(token)
+        return fake.capture.call_args.kwargs
+
+    shared_ip = {"cf-connecting-ip": "160.79.104.1"}
+    a = await call({**shared_ip, "mcp-session-id": "one", "x-fpl-team-id": "6071111"})
+    b = await call({**shared_ip, "mcp-session-id": "two"})
+    c = await call({**shared_ip, "mcp-session-id": "three"})
+    d = await call(shared_ip)
+
+    assert a["properties"]["id_source"] == "team_header"
+    assert a["distinct_id"].startswith("t_") and "6071111" not in repr(a)
+    assert b["properties"]["id_source"] == "session"
+    assert b["distinct_id"] != c["distinct_id"]  # two people, same provider IP
+    assert d["properties"]["id_source"] == "ip"

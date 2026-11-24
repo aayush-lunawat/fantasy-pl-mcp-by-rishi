@@ -5,7 +5,7 @@ FPL rate limiter.
 """
 import logging
 
-from .fpl.inbound_limiter import inbound_limiter
+from .fpl.inbound_limiter import inbound_limiter, ip_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -13,13 +13,16 @@ logger = logging.getLogger(__name__)
 def _client_key(scope) -> str:
     """Best-effort caller identity to key the inbound limiter on.
 
-    Trusts X-Forwarded-For: this server binds 127.0.0.1 and is reached only
-    through the Caddy reverse proxy in front of it (see deployment docs), so
-    nothing outside can talk to it directly and spoof the header. Falls back
-    to the raw connection address for local/direct use (e.g. testing without
-    a proxy in front).
+    Trusts CF-Connecting-IP and X-Forwarded-For: this server binds 127.0.0.1
+    and is reached only through the reverse proxy or tunnel in front of it
+    (see deployment docs), so nothing outside can talk to it directly and
+    spoof the headers. Falls back to the raw connection address for
+    local/direct use (e.g. testing without a proxy in front).
     """
     headers = dict(scope.get("headers") or [])
+    cf_ip = headers.get(b"cf-connecting-ip")
+    if cf_ip:
+        return cf_ip.decode("latin-1", "replace").strip()
     xff = headers.get(b"x-forwarded-for")
     if xff:
         return xff.decode("latin-1", "replace").split(",")[0].strip()
@@ -38,9 +41,13 @@ class InboundRateLimitMiddleware:
             await self.app(scope, receive, send)
             return
 
-        key = _client_key(scope)
-        if not inbound_limiter.allow(key):
-            logger.warning("Inbound rate limit exceeded for %s", key)
+        ip = _client_key(scope)
+        session = dict(scope.get("headers") or []).get(b"mcp-session-id")
+        # Per-session budget once a session exists, per-address before that;
+        # plus a looser per-address ceiling either way.
+        key = "s:" + session.decode("latin-1", "replace") if session else ip
+        if not (ip_limiter.allow(ip) and inbound_limiter.allow(key)):
+            logger.warning("Inbound rate limit exceeded for %s", ip)
             await send(
                 {
                     "type": "http.response.start",
