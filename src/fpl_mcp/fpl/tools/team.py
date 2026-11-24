@@ -387,9 +387,10 @@ def register_tools(mcp):
                     "setup_instructions": "Run 'fpl-mcp-config setup' to configure your FPL credentials"
                 }
 
-            # Try to get basic team info as authentication test
+            # Authenticated request only: get_entry_data would fall back to
+            # public data and report success even with an expired token.
             try:
-                entry_data = await auth_manager.get_entry_data()
+                entry_data = await auth_manager.verify_authentication()
 
                 return {
                     "authenticated": True,

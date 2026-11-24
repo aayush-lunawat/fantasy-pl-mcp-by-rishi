@@ -18,6 +18,24 @@ from ..config import (
 
 logger = logging.getLogger(__name__)
 
+# (connect, read) seconds for unauthenticated GETs, matching the httpx
+# timeouts FPLAPI uses so a stalled FPL response fails instead of hanging.
+PUBLIC_REQUEST_TIMEOUT = (5.0, 15.0)
+
+# Status codes that mean "your credentials were refused". Only these justify
+# retrying a public endpoint without credentials; a 404 or 429 would fail the
+# same way on the second attempt and only spend another rate-limit slot.
+_AUTH_FAILURE_STATUSES = (401, 403)
+
+
+class FPLAuthError(ValueError):
+    """Stored FPL credentials are missing, expired or were refused.
+
+    Subclasses ValueError so existing callers that catch ValueError for
+    credential problems keep working.
+    """
+
+
 class FPLAuthManager:
     """Manages FPL authentication with secure credential handling"""
     
@@ -111,7 +129,7 @@ class FPLAuthManager:
         """
         if not self._refresh_token:
             logger.error("FPL refresh token not found")
-            raise ValueError(
+            raise FPLAuthError(
                 "FPL authentication requires a refresh token. "
                 "Run 'fpl-mcp-config setup' to configure it."
             )
@@ -149,19 +167,19 @@ class FPLAuthManager:
                 except Exception:
                     detail = response.text[:200]
                 if response.status_code in (400, 401):
-                    raise ValueError(
+                    raise FPLAuthError(
                         "FPL refresh token is invalid or expired. Provide a "
                         "fresh one via the update_fpl_credentials tool (copy "
                         "the 'oidc.user' value from Local storage on "
                         "fantasy.premierleague.com) or re-run "
                         f"'fpl-mcp-config setup'. ({detail})"
                     )
-                raise ValueError(f"Failed to authenticate with FPL: {detail}")
+                raise FPLAuthError(f"Failed to authenticate with FPL: {detail}")
 
             token_data = response.json()
             self._access_token = token_data.get("access_token")
             if not self._access_token:
-                raise ValueError("Token endpoint did not return an access token")
+                raise FPLAuthError("Token endpoint did not return an access token")
 
             expires_in = int(token_data.get("expires_in", 3600))
             self._access_token_expiry = datetime.now() + timedelta(seconds=expires_in)
@@ -248,7 +266,7 @@ class FPLAuthManager:
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None,
-            lambda: session.get(url, headers=headers),
+            lambda: session.get(url, headers=headers, timeout=PUBLIC_REQUEST_TIMEOUT),
         )
 
         response.raise_for_status()
@@ -267,21 +285,47 @@ class FPLAuthManager:
         unauthenticated request when they are not, rather than raising.
 
         If an authenticated attempt fails for a credential reason (expired or
-        revoked refresh token), it falls back to the public request instead of
-        surfacing an auth error for data that never needed auth.
+        revoked refresh token, or FPL answering 401/403), it falls back to the
+        public request instead of surfacing an auth error for data that never
+        needed auth. Any other failure (404, 429, 5xx, network, bad JSON) is
+        raised unchanged: retrying without credentials cannot fix it and would
+        spend another rate-limit slot.
         """
         if self.has_credentials:
             try:
                 return await self.make_authed_request(url)
-            except Exception as e:
-                logger.warning(
-                    "Authenticated request to %s failed (%s); retrying "
-                    "unauthenticated, as this endpoint is public",
-                    url,
-                    e,
-                )
+            except FPLAuthError as e:
+                reason = str(e)
+            except requests.HTTPError as e:
+                status = e.response.status_code if e.response is not None else None
+                if status not in _AUTH_FAILURE_STATUSES:
+                    raise
+                reason = f"HTTP {status}"
+            logger.warning(
+                "Authenticated request to %s failed (%s); retrying "
+                "unauthenticated, as this endpoint is public",
+                url,
+                reason,
+            )
 
         return await self.make_public_request(url)
+
+    async def verify_authentication(self, team_id: Optional[int] = None) -> Dict[str, Any]:
+        """Fetch the team entry over the authenticated path only.
+
+        For checking that credentials work. Unlike get_entry_data, this never
+        falls back to public data, so an expired token raises FPLAuthError
+        instead of looking like a successful login.
+        """
+        team_id = team_id or self._team_id
+        if not team_id:
+            raise ValueError("Team ID must be provided")
+        if not self.has_credentials:
+            raise FPLAuthError(
+                "No FPL refresh token stored. Run 'fpl-mcp-config setup' to configure it."
+            )
+        url = f"{FPL_API_BASE_URL}/entry/{team_id}/"
+        return await self.make_authed_request(url)
 
     async def get_my_team(self, team_id: Optional[int] = None) -> Dict[str, Any]:
         """Get current team for the authenticated user"""
